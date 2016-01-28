@@ -17,10 +17,10 @@
 
 var sinon = require('sinon');
 
-var truffler = module.exports = sinon.stub();
-
-truffler.mockReturn = {
-	run: sinon.stub().yieldsAsync()
+module.exports = {
+	mockBrowser: {},
+	mockPage: {
+		evaluate: sinon.stub().yieldsAsync(),
+		injectJs: sinon.stub().yieldsAsync(null, true)
+	}
 };
-
-truffler.returns(truffler.mockReturn);
