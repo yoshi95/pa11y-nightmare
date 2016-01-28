@@ -21,6 +21,6 @@ module.exports = {
 	mockBrowser: {},
 	mockPage: {
 		evaluate: sinon.stub().yieldsAsync(),
-		injectJs: sinon.stub().yieldsAsync(null, true)
+		inject: sinon.stub().yieldsAsync(null, true)
 	}
 };
