@@ -23,23 +23,19 @@ var path = require('path');
 var sinon = require('sinon');
 
 describe('lib/pa11y', function() {
-	var extend, injectScriptPath, pa11y, phantom, pkg, truffler, trufflerPkg, window;
+	var extend, injectScriptPath, pa11y, nightmare, pkg, window;
 
 	beforeEach(function() {
 
 		extend = sinon.spy(require('node.extend'));
 		mockery.registerMock('node.extend', extend);
 
-		injectScriptPath = path.resolve(__dirname, '..', '..', '..', 'lib', 'inject.js');
+		injectScriptPath = path.resolve(__dirname, '..', '..', '..', 'lib', 'report-processor.js');
 
-		phantom = require('../mock/phantom');
-		mockery.registerMock('phantom', phantom);
+		nightmare = require('../mock/nightmare');
+		mockery.registerMock('nightmare', nightmare);
 
 		pkg = require('../../../package.json');
-		trufflerPkg = require('truffler/package.json');
-
-		truffler = require('../mock/truffler');
-		mockery.registerMock('truffler', truffler);
 
 		window = require('../mock/window');
 
@@ -95,27 +91,23 @@ describe('lib/pa11y', function() {
 		});
 
 		it('should have a `page.settings.userAgent` property', function() {
-			assert.strictEqual(defaults.page.settings.userAgent, 'pa11y/' + pkg.version + ' (truffler/' + trufflerPkg.version + ')');
+			assert.strictEqual(defaults.page.settings.userAgent, 'pa11y/' + pkg.version);
 		});
 
-		it('should have a `phantom` property', function() {
-			assert.isObject(defaults.phantom);
+		it('should have a `nightmare` property', function() {
+			assert.isObject(defaults.nightmare);
 		});
 
-		it('should have a `phantom.onStdout` method', function() {
-			assert.isFunction(defaults.phantom.onStdout);
+		it('should have a `nightmare.onStdout` method', function() {
+			assert.isFunction(defaults.nightmare.onStdout);
 		});
 
-		it('should have a `phantom.parameters` property', function() {
-			assert.isObject(defaults.phantom.parameters);
+		it('should have a `nightmare.parameters` property', function() {
+			assert.isObject(defaults.nightmare.parameters);
 		});
 
-		it('should have a `phantom.parameters[\'ignore-ssl-errors\']` property', function() {
-			assert.strictEqual(defaults.phantom.parameters['ignore-ssl-errors'], 'true');
-		});
-
-		it('should have a `phantom.parameters[\'ssl-protocol\']` property', function() {
-			assert.strictEqual(defaults.phantom.parameters['ssl-protocol'], 'tlsv1');
+		it('should have a `nightmare.parameters[\'ignore-ssl-errors\']` property', function() {
+			assert.strictEqual(defaults.nightmare.parameters['ignore-ssl-errors'], 'true');
 		});
 
 		it('should have a `standard` property', function() {
@@ -161,20 +153,6 @@ describe('lib/pa11y', function() {
 			]);
 		});
 
-		it('should create a Truffler instance with the defaulted options', function() {
-			assert.calledOnce(truffler);
-			assert.strictEqual(truffler.firstCall.args[0], extend.firstCall.returnValue);
-		});
-
-		it('should pass a test function into Truffler', function() {
-			assert.isFunction(truffler.firstCall.args[1]);
-		});
-
-		it('should return the Truffler instance', function() {
-			assert.isObject(instance);
-			assert.strictEqual(instance, truffler.mockReturn);
-		});
-
 		it('should throw an error if `options.standard` is invalid', function() {
 			options.standard = 'foo';
 			assert.throws(function() {
@@ -184,7 +162,7 @@ describe('lib/pa11y', function() {
 
 	});
 
-	describe('Truffler test function', function() {
+	describe('Page test function', function() {
 		var expectedResults, options, runResults, testFunction;
 
 		beforeEach(function(done) {
@@ -196,133 +174,72 @@ describe('lib/pa11y', function() {
 				standard: 'Section508',
 				wait: 0
 			};
-			pa11y(options);
-
-			expectedResults = {
-				messages: [
+			testFunction = pa11y(options).testPage;
+			expectedResults = [
 					'foo',
 					'bar'
-				]
-			};
-			phantom.mockPage.evaluate = sinon.spy(function() {
-				phantom.mockPage.onCallback(expectedResults);
+				];
+			nightmare.mockPage.evaluate = sinon.spy(function() {
+				return new Promise(function(resolve) {
+					resolve(expectedResults);
+				});
 			});
-
-			testFunction = truffler.firstCall.args[1];
-			testFunction(phantom.mockBrowser, phantom.mockPage, function(error, results) {
-				runResults = results;
-				done(error);
-			});
-		});
-
-		it('should create a page callback on the PhantomJS page', function() {
-			assert.isFunction(phantom.mockPage.onCallback);
+			testFunction(options, nightmare.mockPage);
 		});
 
 		it('should inject HTML CodeSniffer', function() {
-			var inject = phantom.mockPage.injectJs.withArgs(pa11y.defaults.htmlcs);
+			var inject = nightmare.mockPage.injectJs.withArgs('js', pa11y.defaults.htmlcs);
 			assert.calledOnce(inject);
 			assert.isFunction(inject.firstCall.args[1]);
-			assert.notCalled(phantom.mockPage.includeJs);
 		});
 
 		it('should callback with an error if HTML CodeSniffer injection errors', function(done) {
 			var expectedError = new Error('...');
-			phantom.mockPage.injectJs.withArgs(pa11y.defaults.htmlcs).yieldsAsync(expectedError);
-			testFunction(phantom.mockBrowser, phantom.mockPage, function(error) {
-				assert.isNotNull(error);
-				assert.strictEqual(error, expectedError);
-				done();
-			});
-		});
-
-		it('should callback with an error if HTML CodeSniffer does not inject properly', function(done) {
-			phantom.mockPage.injectJs.withArgs(pa11y.defaults.htmlcs).yieldsAsync(null, false);
-			testFunction(phantom.mockBrowser, phantom.mockPage, function(error) {
-				assert.isNotNull(error);
-				assert.strictEqual(error.message, 'Pa11y was unable to inject scripts into the page');
-				done();
-			});
-		});
-
-		describe('when a remote HTML CodeSniffer is specified', function() {
-
-			beforeEach(function(done) {
-				options = {
-					htmlcs: 'http://foo.com/HTMLCS.js'
-				};
-				truffler.reset();
-				phantom.mockPage.injectJs.reset();
-				pa11y(options);
-				testFunction = truffler.firstCall.args[1];
-				testFunction(phantom.mockBrowser, phantom.mockPage, done);
-			});
-
-			it('should include the remote HTML CodeSniffer', function() {
-				var include = phantom.mockPage.includeJs.withArgs(options.htmlcs);
-				assert.calledOnce(include);
-				assert.isFunction(include.firstCall.args[1]);
-				assert.notCalled(phantom.mockPage.injectJs.withArgs(pa11y.defaults.htmlcs));
-			});
-
-			it('should callback with an error if HTML CodeSniffer inclusion errors', function(done) {
-				var expectedError = new Error('...');
-				phantom.mockPage.includeJs.withArgs(options.htmlcs).yieldsAsync(expectedError);
-				testFunction(phantom.mockBrowser, phantom.mockPage, function(error) {
+			nightmare.mockPage.injectJs.withArgs('js', pa11y.defaults.htmlcs).yieldsAsync(expectedError);
+			testFunction(options, nightmare.mockPage)
+				.catch(function(error) {
 					assert.isNotNull(error);
 					assert.strictEqual(error, expectedError);
 					done();
 				});
-			});
+		});
 
-			it('should callback with an error if HTML CodeSniffer does not include properly', function(done) {
-				phantom.mockPage.includeJs.withArgs(options.htmlcs).yieldsAsync(null, false);
-				testFunction(phantom.mockBrowser, phantom.mockPage, function(error) {
+		it('should callback with an error if HTML CodeSniffer does not inject properly', function(done) {
+			nightmare.mockPage.injectJs.withArgs('js', pa11y.defaults.htmlcs).yieldsAsync(null, false);
+			testFunction(options, nightmare.mockPage)
+				.catch(function(error) {
 					assert.isNotNull(error);
-					assert.strictEqual(error.message, 'Pa11y was unable to include scripts in the page');
+					assert.strictEqual(error.message, 'Pa11y was unable to inject scripts into the page');
 					done();
 				});
-			});
-
 		});
 
 		it('should inject the pa11y inject script', function() {
-			var inject = phantom.mockPage.injectJs.withArgs(injectScriptPath);
+			var inject = nightmare.mockPage.injectJs.withArgs(injectScriptPath);
+			testFunction(options, nightmare.mockPage);
 			assert.calledOnce(inject);
 			assert.isFunction(inject.firstCall.args[1]);
 		});
 
 		it('should callback with an error if the pa11y inject script injection errors', function(done) {
 			var expectedError = new Error('...');
-			phantom.mockPage.injectJs.withArgs(injectScriptPath).yieldsAsync(expectedError);
-			testFunction(phantom.mockBrowser, phantom.mockPage, function(error) {
-				assert.isNotNull(error);
-				assert.strictEqual(error, expectedError);
-				done();
-			});
+			nightmare.mockPage.injectJs.withArgs(injectScriptPath).yieldsAsync(expectedError);
+			testFunction(options, nightmare.mockPage)
+				.catch(function(error) {
+					assert.isNotNull(error);
+					assert.strictEqual(error, expectedError);
+					done();
+				});
 		});
 
 		it('should callback with an error if the pa11y inject script does not inject properly', function(done) {
-			phantom.mockPage.injectJs.withArgs(injectScriptPath).yieldsAsync(null, false);
-			testFunction(phantom.mockBrowser, phantom.mockPage, function(error) {
-				assert.isNotNull(error);
-				assert.strictEqual(error.message, 'Pa11y was unable to inject scripts into the page');
-				done();
-			});
-		});
-
-		it('should evaluate a JavaScript function with passed in options', function() {
-			assert.calledOnce(phantom.mockPage.evaluate);
-			assert.isFunction(phantom.mockPage.evaluate.firstCall.args[0]);
-			assert.deepEqual(phantom.mockPage.evaluate.firstCall.args[1], {
-				ignore: [
-					'baz',
-					'qux'
-				],
-				standard: 'Section508',
-				wait: 0
-			});
-			assert.isFunction(phantom.mockPage.evaluate.firstCall.args[2]);
+			nightmare.mockPage.injectJs.withArgs(injectScriptPath).yieldsAsync(null, false);
+			testFunction(options, nightmare.mockPage)
+				.catch(function(error) {
+					assert.isNotNull(error);
+					assert.strictEqual(error.message, 'Pa11y was unable to inject scripts into the page');
+					done();
+				});
 		});
 
 		describe('evaluated function()', function() {
@@ -331,7 +248,7 @@ describe('lib/pa11y', function() {
 			beforeEach(function() {
 				global.window = window;
 				global.injectPa11y = sinon.spy();
-				evaluatedFunction = phantom.mockPage.evaluate.firstCall.args[0];
+				evaluatedFunction = nightmare.mockPage.evaluate.firstCall.args[0];
 				returnValue = evaluatedFunction(options);
 			});
 
@@ -370,7 +287,7 @@ describe('lib/pa11y', function() {
 			truffler.reset();
 			pa11y(options);
 			testFunction = truffler.firstCall.args[1];
-			testFunction(phantom.mockBrowser, phantom.mockPage, function() {
+			testFunction(nightmare.mockBrowser, nightmare.mockPage, function() {
 				assert.calledWith(options.log.debug, 'Waiting for ' + options.wait + 'ms');
 				done();
 			});
@@ -384,10 +301,10 @@ describe('lib/pa11y', function() {
 			expectedResults = {
 				error: 'foo'
 			};
-			phantom.mockPage.evaluate = sinon.spy(function() {
-				phantom.mockPage.onCallback(expectedResults);
+			nightmare.mockPage.evaluate = sinon.spy(function() {
+				nightmare.mockPage.onCallback(expectedResults);
 			});
-			testFunction(phantom.mockBrowser, phantom.mockPage, function(error) {
+			testFunction(nightmare.mockBrowser, nightmare.mockPage, function(error) {
 				assert.isNotNull(error);
 				assert.instanceOf(error, Error);
 				assert.strictEqual(error.message, 'foo');

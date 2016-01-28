@@ -1,4 +1,4 @@
-{
+
   "name": "pa11y",
   "version": "3.2.1",
   "description": "pa11y is your automated accessibility testing pal",
@@ -36,6 +36,7 @@
     "truffler": "~2.1"
   },
   "devDependencies": {
+    "co": "^4.6.0",
     "istanbul": "~0.3",
     "jscs": "^2",
     "jshint": "^2",
