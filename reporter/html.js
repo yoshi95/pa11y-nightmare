@@ -17,22 +17,8 @@
 
 var fs = require('fs');
 
-module.exports = {
-	begin: emptyFunction,
-	error: reportError,
-	debug: emptyFunction,
-	info: emptyFunction,
-	results: reportResults
-};
-
-function emptyFunction() {}
-
-function reportError(message) {
-	console.error(message);
-}
-
 function reportResults(results, url) {
-	console.log(buildHtml(results, url));
+	return buildHtml(results, url);
 }
 
 function buildHtml(results, url) {
@@ -91,3 +77,5 @@ function isNotice(result) {
 function isWarning(result) {
 	return (result.type === 'warning');
 }
+
+module.exports = { process: reportResults };
